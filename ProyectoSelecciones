@@ -1,0 +1,222 @@
+--Subconsultas básicas-------------------------------------------------------------------------------------------------
+--Muestra todos los datos de usuario
+SELECT*
+FROM usuario U;
+
+--JOINS ---------------------------------------------------------------------------------------------------------------
+--Muestra el rol que tiene cada usuario
+SELECT U.nombre, R.rol
+FROM Usuario U JOIN Rol R ON U.no_rol = R.no_rol;
+
+--Subconsulta para saber el num de archivos que tiene un usuario
+SELECT A.nombre, B.num_archivos
+FROM (SELECT*
+	 FROM Usuario u JOIN usuario_carpeta uc1 ON u.id = uc1.id_usuario) AS A
+	 JOIN 
+	 (SELECT*
+	 FROM datos_carpeta dc JOIN carpeta c ON dc.codigo_carpeta = c.codigo) AS B
+	 ON A.codigo_carpeta = B.codigo;
+	 
+--saber que tipo de archivo tiene un usuario
+SELECT U.nombre, DA.tipo_archivo
+FROM usuario U JOIN usuario_archivo UA ON U.id = UA.id_usuario, Datos_archivo DA
+WHERE UA.codigo_archivo = DA.codigo_archivo;
+
+--VISTAS---------------------------------------------------------------------------------------------------------------
+--muestra todos los admins de la base de datos
+CREATE VIEW admins AS (
+SELECT*
+FROM Usuario U
+WHERE no_rol = 1
+);
+-- materialización de la vista
+SELECT*
+FROM admins
+
+--mostrar el peso de una carpeta
+CREATE VIEW peso_carpeta AS(
+SELECT C.nombre, DC.peso_carpeta
+FROM Carpeta C JOIN Datos_carpeta DC ON C.codigo = DC.codigo_carpeta);
+
+--materializando vista
+SELECT*
+FROM peso_carpeta;
+
+--FUNCTION-------------------------------------------------------------------------------------------------------------
+--Funcion que retorna la clave de un usuario
+CREATE OR REPLACE FUNCTION retornarclave(nombre_usuario VARCHAR(45))
+	RETURNS INTEGER
+	LANGUAGE 'plpgsql'
+AS $$
+DECLARE 
+	clave INTEGER;
+BEGIN 
+	clave := (SELECT clave_usuario
+			FROM usuario
+			WHERE nombre = $1);
+	RETURN clave;
+END;
+$$
+SELECT retornarclave('Carlos Salazar');
+
+--TRIGGER--------------------------------------------------------------------------------------------------------------
+
+ALTER TABLE Datos_Archivo
+	add constraint peso_chk
+	check(0<= peso_archivo and peso_archivo <= 50)
+
+	
+--Codigo y nombre de los usuarios que actualizacion un archivo en el año 2022 y era de tipo cpp
+
+SELECT U.id, U.nombre
+FROM Usuario U INNER JOIN Usuario_archivo UA ON (U.id = UA.Id_usuario)
+			   INNER JOIN Archivo A ON (A.codigo = UA.codigo_archivo)
+			   INNER JOIN Datos_archivo D ON (D.Codigo_Archivo = A.codigo)
+where extract(year from D.fecha) = '2022' and D.tipo_archivo = 'cpp';
+				
+
+--Se tiene un Trigger que se dispara cuando alguien inserta una fila en la tabla Archivo
+--Este registra en un log previamente creado, el codigo, su nombre y 
+--el usuario actual que hizo la insercion y el instante en que se hizo.
+
+DROP TABLE IF EXISTS Log_Inserciones_Archivo;
+CREATE TABLE Log_Inserciones_Archivo(
+	codigo INTEGER, 
+	nombre INTEGER,
+	user_name VARCHAR (100),
+	fecha TIMESTAMP WITHOUT TIME ZONE
+);
+
+CREATE OR REPLACE FUNCTION inserciones_Archivo()
+	RETURNS TRIGGER
+	LANGUAGE 'plpgsql'
+AS $$
+BEGIN 
+	INSERT INTO Log_Inserciones_Archivo(codigo, nombre, user_name, fecha)
+		VALUES (NEW.codigo, NEW.nombre, CURRENT_USER, now());
+	RETURN NEW;
+END;
+$$
+
+DROP TRIGGER IF EXISTS registrar_Log_Inserciones_Archivo ON public.Archivo;
+CREATE TRIGGER registrar_Log_Inserciones_Archivo
+	AFTER INSERT ON public.Archivo
+	FOR EACH ROW
+		EXECUTE FUNCTION inserciones_Archivo();
+		
+SELECT *
+FROM Log_Inserciones_Archivo; 
+
+--DOMAIN y TIPO DE DATOS--
+
+--Tipo de dato llamado nombre_documentos, 
+--que estandarice solo los nombres de los archivos
+--y los nombre de las carpetas
+--para que tenga una longitud variable de hasta 80 caracteres y que sea obligatorio
+
+CREATE DOMAIN nombre_documentos VARCHAR(80) NOT NULL;
+ALTER TABLE Archivo ALTER COLUMN nombre SET DATA TYPE nombre_carpeta;
+ALTER TABLE Carpeta ALTER COLUMN nombre SET DATA TYPE nombre_carpeta;
+
+
+--Tipo de datos llamado peso_completo
+--compuesto por los siguientes campos: peso integer y medida varchar(5)
+CREATE TYPE peso_completo AS (peso int, medida varchar(5));
+
+
+--ROLES, USUARIOS Y PRIVILEGIOS----------------------------------------------------------------------------------------
+--admins
+CREATE ROLE admin WITH 
+LOGIN;
+CREATE USER Lucia_Ardila WITH
+PASSWORD '123';
+GRANT ALL PRIVILEGES ON DATABASE "Proyecto 3" TO lucia_Ardila;
+
+CREATE USER Cesar_Segura WITH
+PASSWORD '6925';
+GRANT ALL PRIVILEGES ON DATABASE "Proyecto 3" TO Cesar_segura;
+
+CREATE USER valentina_Herrera WITH
+PASSWORD '456';
+GRANT ALL PRIVILEGES ON DATABASE "Proyecto 3" TO valentina_Herrera;
+
+--RECURSIÓN-------------------------------------------------------------------------------------------------------------
+-- jerarquía: la jerarquía en la base de datos es de admin, editor, comentarista y por último lector
+--creando una columna para de terminar los sub alternos de los admin
+ALTER TABLE usuario
+	ADD COLUMN administrador INTEGER;
+
+--ingresando los datos
+INSERT INTO usuario (id, nombre, correo, clave_usuario, archivo_guardados, no_rol, no_permisos,  administrador)
+	VALUES (1 , 'Lucía Ardila'      , 'lucia.ardila@gmail.com'      , 123  , 3   , 1 , 1 , NULL),
+	       (2 , 'Valentina Herrera' , 'valentina.herrera@gmail.com' , 456  , 7   , 1 , 1 , NULL),
+		   (3 , 'Cesar Segura'      , 'cesar.segura@gmail.com'      , 6925 , 11  , 1 , 1 , NULL),
+		   (4 , 'Sara Sánchez'      , 'sara.sanchez@gmail.com'      , NULL , 1   , 2 , 2 , 1),
+		   (5 , 'Oscar Pérez'       , 'oscar.perez@gmail.com'       , NULL , 70  , 4 , 4 , 18),
+		   (6 , 'Julieta Ponce'     , 'julieta.ponce@gmail.com'     , NULL , 34  , 3 , 3 , 19),
+		   (7 , 'Adriana Hernández' , 'adriana.hernandez@gmail.com' , NULL , 28  , 2 , 2 , 18),
+		   (8 , 'María Gonzales'    , 'maria.gonzales@gmail.com'    , NULL , 90  , 3 , 3 , 21),
+		   (9 , 'Mauricio García'   , 'mauricio.garcia@gmail.com'   , 934  , 23  , 1 , 1 , NULL),
+		   (10, 'Jose Fernández'    , 'jose.fernandez@gmail.com'    , NULL , 56  , 4 , 4 , 19),
+		   (11, 'Camilo Quintana'   , 'camilo.quintana@gmail.com'   , NULL , 39  , 3 , 3 , 20),
+		   (12, 'Sofia Castillo'    , 'sofia.castillo@gmail.com'    , NULL , 78  , 2 , 2 , 14),
+		   (13, 'Juan José Acosta'  , 'juanj.acosta@gmail.com'      , NULL , 5   , 4 , 4 , 2),
+		   (14, 'Sergio Quintero'   , 'sergio.quintero@gmail.com'   , 789  , 100 , 1 , 1 , NULL),
+		   (15, 'Laura Camacho'     , 'laura.camacho@gmail.com'     , NULL , 130 , 3 , 3 , 1),
+		   (16, 'Jose Luis Peña'    , 'josel.peña@gmail.com'        , NULL , 45  , 2 , 2 , 2),
+		   (17, 'Juana Contreras'   , 'juana.contreras@gmail.com'   , NULL , 143 , 3 , 3 , 18),
+		   (18, 'Mariana Palacios'  , 'mariana.palacios@gmail.com'  , 546  , 77  , 1 , 1 , NULL),
+		   (19, 'Carlos Salazar'    , 'carlos.salazar@gmail.com'    , 7645 , 89  , 1 , 1 , NULL),
+		   (20, 'Sol Amaya'         , 'sol.amaya@gmail.com'         , 0989 , 2   , 1 , 1 , NULL),
+		   (21, 'karen Murcia'      , 'karen.murcia@gmail.com'      , 0034 , 83  , 1 , 1 , NULL),
+		   (22, 'Andrés Bernal'     , 'andres.bernal@gmail.com'     , NULL , 20  , 2 , 2 , NULL);
+
+
+--creando función recursiva para mostrar los sub alternos de mariana palacios con codigo 18
+WITH RECURSIVE sub_alternos AS(
+  SELECT*
+  FROM usuario 
+  WHERE administrador = 18
+  UNION
+  SELECT U.*
+  FROM usuario U INNER JOIN sub_alternos S ON S.id = U.id
+)
+SELECT*
+FROM sub_alternos
+
+--RANKING--------------------------------------------------------------------------------------------------------------
+--Mostrar de forma Ascendente del número de roles que tiene un ususario
+SELECT U.nombre, P.no_permisos, DENSE_RANK() OVER (
+       ORDER BY P.permisos ASC) AS ranking_permisos
+FROM Usuario U JOIN permisos P ON U.no_permisos = P.no_permisos 
+
+--mostrar ususario con más numero de archivos
+SELECT A.nombre, B.num_archivos, DENSE_RANK() OVER(
+       ORDER BY B.num_archivos DESC) AS rankig_num_archivos
+FROM (SELECT*
+	 FROM Usuario U JOIN Usuario_carpeta UA ON U.id = UA.id_usuario) AS A
+	 JOIN 
+	 (SELECT*
+	 FROM carpeta C JOIN Datos_carpeta DC ON C.codigo = DC.codigo_carpeta) AS B 
+	 ON A.codigo_carpeta = B.codigo
+	 
+--TRANSACCIONES--------------------------------------------------------------------------------------------------------
+--transacción para el numero de archivos
+BEGIN;
+--si el usuario elimina un archivo
+	UPDATE Usuario
+	SET archivo_guardados = archivo_guardados - 1
+	WHERE id = 3;
+	--el usuario sube 3 archivos
+	UPDATE Usuario
+	SET archivo_guardados = archivo_guardados + 3
+	WHERE id = 9;
+	
+--confirmar la transacción
+COMMIT;
+
+--Mostrar los datos de los usuarios
+SELECT u.id, U.nombre, U.archivo_guardados
+FROM usuario U;
+
+--ROLLBACK;
