@@ -22,6 +22,20 @@ SELECT U.nombre, DA.tipo_archivo
 FROM usuario U JOIN usuario_archivo UA ON U.id = UA.id_usuario, Datos_archivo DA
 WHERE UA.codigo_archivo = DA.codigo_archivo;
 
+--Codigo y nombre de los usuarios que actualizacion un archivo en el año 2022 y era de tipo cpp
+SELECT U.id, U.nombre
+FROM Usuario U INNER JOIN Usuario_archivo UA ON (U.id = UA.Id_usuario)
+			   INNER JOIN Archivo A ON (A.codigo = UA.codigo_archivo)
+			   INNER JOIN Datos_archivo D ON (D.Codigo_Archivo = A.codigo)
+where extract(year from D.fecha) = '2022' and D.tipo_archivo = 'cpp';
+
+-ALTER-------------------------------------------------------------------------------------
+
+--Alternando una tabla asi se pone una restriccion para el peso archivo sea de 0 a 50
+ALTER TABLE Datos_Archivo
+	add constraint peso_chk
+	check(0<= peso_archivo and peso_archivo <= 50)
+				
 --VISTAS---------------------------------------------------------------------------------------------------------------
 --muestra todos los admins de la base de datos
 CREATE VIEW admins AS (
@@ -60,20 +74,6 @@ $$
 SELECT retornarclave('Carlos Salazar');
 
 --TRIGGER--------------------------------------------------------------------------------------------------------------
-
-ALTER TABLE Datos_Archivo
-	add constraint peso_chk
-	check(0<= peso_archivo and peso_archivo <= 50)
-
-	
---Codigo y nombre de los usuarios que actualizacion un archivo en el año 2022 y era de tipo cpp
-
-SELECT U.id, U.nombre
-FROM Usuario U INNER JOIN Usuario_archivo UA ON (U.id = UA.Id_usuario)
-			   INNER JOIN Archivo A ON (A.codigo = UA.codigo_archivo)
-			   INNER JOIN Datos_archivo D ON (D.Codigo_Archivo = A.codigo)
-where extract(year from D.fecha) = '2022' and D.tipo_archivo = 'cpp';
-				
 
 --Se tiene un Trigger que se dispara cuando alguien inserta una fila en la tabla Archivo
 --Este registra en un log previamente creado, el codigo, su nombre y 
